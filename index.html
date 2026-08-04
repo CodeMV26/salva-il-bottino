@@ -5,9 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Salva il Bottino - AI Advisor</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
-  </style>
+  <!-- Import SDK Ufficiale Google Gemini -->
+  <script type="importmap">
+    {
+      "imports": {
+        "@google/genai": "https://esm.run/@google/genai"
+      }
+    }
+  </script>
 </head>
 <body class="bg-slate-900 text-slate-100 font-sans min-h-screen flex flex-col justify-between max-w-md mx-auto px-4 py-5">
 
@@ -94,13 +99,15 @@
     </details>
   </footer>
 
-  <script>
+  <script type="module">
+    import { GoogleGenAI } from '@google/genai';
+
     let state = { step: 1, capital: 3000, currentYesBet: 0, currentNoBet: 0, history: [], apiKey: '' };
 
     window.onload = () => {
       const saved = localStorage.getItem('bottino_gemini_state');
       if (saved) state = JSON.parse(saved);
-      if (!state.apiKey) setTimeout(configAPIKey, 500);
+      if (!state.apiKey) setTimeout(window.configAPIKey, 500);
       updateUI();
     };
 
@@ -108,13 +115,13 @@
       localStorage.setItem('bottino_gemini_state', JSON.stringify(state));
     }
 
-    function configAPIKey() {
-      const key = prompt("Inserisci la nuova Gemini API Key:", state.apiKey || "");
+    window.configAPIKey = function() {
+      const key = prompt("Inserisci la tua Gemini API Key:", state.apiKey || "");
       if (key) {
         state.apiKey = key.trim();
         saveState();
       }
-    }
+    };
 
     function updateUI() {
       document.getElementById('step-display').innerText = `${state.step} / 15`;
@@ -134,10 +141,10 @@
       }
     }
 
-    async function askGemini() {
+    window.askGemini = async function() {
       const qText = document.getElementById('question-text').value.trim();
       if (!qText) return alert("Inserisci la domanda!");
-      if (!state.apiKey) return configAPIKey();
+      if (!state.apiKey) return window.configAPIKey();
 
       const btn = document.getElementById('ask-btn');
       btn.disabled = true;
@@ -146,8 +153,11 @@
       document.getElementById('loading-spinner').classList.remove('hidden');
       document.getElementById('output-card').classList.add('hidden');
 
-      const cleanKey = state.apiKey.trim();
-      const systemPrompt = `Sei un consulente esperto di scommesse per "Salva il Bottino".
+      try {
+        // Inizializza l'SDK Ufficiale Google GenAI
+        const ai = new GoogleGenAI({ apiKey: state.apiKey.trim() });
+        
+        const systemPrompt = `Sei un consulente esperto di scommesse per "Salva il Bottino".
 Capitale attuale: ${state.capital}€. Domanda ${state.step} di 15.
 Analizza: "${qText}".
 
@@ -159,21 +169,13 @@ Rispondi ESCLUSIVAMENTE in JSON valido con questa struttura:
   "da_evitare": "Opzione da evitare."
 }`;
 
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${cleanKey}`;
-        
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: systemPrompt }] }]
-          })
+        // Chiamata SDK
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: systemPrompt,
         });
 
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message);
-
-        let rawText = data.candidates[0].content.parts[0].text.trim();
+        let rawText = response.text.trim();
         rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
         
         const aiRes = JSON.parse(rawText);
@@ -194,15 +196,16 @@ Rispondi ESCLUSIVAMENTE in JSON valido con questa struttura:
 
         document.getElementById('output-card').classList.remove('hidden');
       } catch (err) {
-        alert("Errore API: " + err.message);
+        alert("Errore Google AI SDK: " + err.message);
+        console.error(err);
       } finally {
         btn.disabled = false;
         btn.classList.remove('opacity-50');
         document.getElementById('loading-spinner').classList.add('hidden');
       }
-    }
+    };
 
-    function registerResult(esito) {
+    window.registerResult = function(esito) {
       const qText = document.getElementById('question-text').value;
       const salvato = esito === 'YES' ? state.currentYesBet : state.currentNoBet;
 
@@ -220,9 +223,9 @@ Rispondi ESCLUSIVAMENTE in JSON valido con questa struttura:
       }
 
       updateUI();
-    }
+    };
 
-    function resetGame() {
+    window.resetGame = function() {
       if (confirm("Reset partita a 3.000 €?")) {
         const key = state.apiKey;
         state = { step: 1, capital: 3000, currentYesBet: 0, currentNoBet: 0, history: [], apiKey: key };
@@ -230,7 +233,7 @@ Rispondi ESCLUSIVAMENTE in JSON valido con questa struttura:
         document.getElementById('output-card').classList.add('hidden');
         updateUI();
       }
-    }
+    };
   </script>
 </body>
 </html>
