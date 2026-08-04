@@ -59,7 +59,7 @@
       <div class="border-b border-slate-700 pb-2">
         <div class="flex justify-between items-center">
           <span id="phase-badge" class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Fase 1</span>
-          <span id="confidence-badge" class="text-[10px] font-bold text-slate-300">Confidenza: --%</span>
+          <span id="confidence-badge" class="text-[10px] font-bold text-slate-300">Confidenza SÌ: --%</span>
         </div>
         <p id="advice-body" class="text-xs text-slate-300 mt-2 leading-relaxed"></p>
       </div>
@@ -156,6 +156,8 @@
       document.getElementById('loading-spinner').classList.remove('hidden');
       document.getElementById('output-card').classList.add('hidden');
 
+      const cleanKey = state.apiKey.trim();
+
       const systemPrompt = `Sei un consulente esperto di scommesse sportive specializzato nel quiz "Salva il Bottino".
 Il giocatore ha attualmente ${state.capital}€ ed è alla domanda ${state.step} di 15.
 Analizza la seguente domanda: "${qText}".
@@ -169,29 +171,32 @@ Rispondi TASSATIVAMENTE ed ESCLUSIVAMENTE con un oggetto JSON valido con la segu
 }`;
 
       try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${state.apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] })
         });
 
         const data = await response.json();
-        let rawText = data.candidates[0].content.parts[0].text;
         
-        // Pulizia eventuale markdown nel JSON
+        if (data.error) {
+          throw new Error(`Google API: ${data.error.message} (Codice: ${data.error.code})`);
+        }
+
+        if (!data.candidates || !data.candidates[0].content.parts[0].text) {
+          throw new Error("Risposta vuota o non valida da parte dell'AI.");
+        }
+
+        let rawText = data.candidates[0].content.parts[0].text;
         rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
         const aiRes = JSON.parse(rawText);
 
-        // Algoritmo di allocazione sul capitale
         let pYes = aiRes.percentuale_si / 100;
-        
-        // Strategia in base allo step
         if (state.step <= 5 && pYes >= 0.65) pYes = pYes >= 0.75 ? 1.0 : 0.8; 
 
         state.currentYesBet = Math.round(state.capital * pYes);
         state.currentNoBet = state.capital - state.currentYesBet;
 
-        // Render risultati
         document.getElementById('advice-body').innerText = aiRes.analisi;
         document.getElementById('confidence-badge').innerText = `Confidenza SÌ: ${aiRes.percentuale_si}%`;
         document.getElementById('bet-yes').innerText = `${state.currentYesBet.toLocaleString('it-IT')} €`;
@@ -201,7 +206,7 @@ Rispondi TASSATIVAMENTE ed ESCLUSIVAMENTE con un oggetto JSON valido con la segu
 
         document.getElementById('output-card').classList.remove('hidden');
       } catch (err) {
-        alert("Errore nella comunicazione con Gemini AI. Verifica la tua API Key o riprova.");
+        alert("Errore: " + err.message);
         console.error(err);
       } finally {
         document.getElementById('loading-spinner').classList.add('hidden');
