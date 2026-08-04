@@ -148,18 +148,6 @@
       }
     }
 
-    async function callGeminiApi(modelName, cleanKey, systemPrompt) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${cleanKey}`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: systemPrompt }] }]
-        })
-      });
-      return await response.json();
-    }
-
     async function askGemini() {
       const qText = document.getElementById('question-text').value.trim();
       if (!qText) return alert("Inserisci la domanda prima di chiedere a Gemini!");
@@ -183,13 +171,18 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
 }`;
 
       try {
-        // Tentativo con modello di produzione standard
-        let data = await callGeminiApi('gemini-2.0-flash', cleanKey, systemPrompt);
+        // Endpoint Ufficiale v1 per gemini-2.0-flash
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${cleanKey}`;
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: systemPrompt }] }]
+          })
+        });
 
-        // Fallback automatico a gemini-1.5-flash se necessario
-        if (data.error) {
-          data = await callGeminiApi('gemini-1.5-flash', cleanKey, systemPrompt);
-        }
+        const data = await response.json();
 
         if (data.error) {
           throw new Error(`Google API (${data.error.code}): ${data.error.message}`);
