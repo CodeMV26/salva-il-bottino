@@ -50,7 +50,7 @@
     <!-- CARICAMENTO -->
     <div id="loading-spinner" class="hidden text-center py-4">
       <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
-      <p class="text-xs text-slate-400 mt-2">Gemini Flash sta analizzando la partita...</p>
+      <p class="text-xs text-slate-400 mt-2">Gemini sta calcolando la strategia...</p>
     </div>
 
     <!-- RISPOSTA DI GEMINI (OUTPUT) -->
@@ -148,34 +148,6 @@
       }
     }
 
-    async function fetchFlashModel(cleanKey, systemPrompt) {
-      // Modelli Flash in ordine di preferenza per le API REST
-      const flashModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
-      let lastError = null;
-
-      for (const model of flashModels) {
-        try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: systemPrompt }] }]
-            })
-          });
-
-          const data = await response.json();
-          if (data && !data.error && data.candidates && data.candidates[0].content.parts[0].text) {
-            return data;
-          }
-          if (data && data.error) lastError = data.error.message;
-        } catch (e) {
-          lastError = e.message;
-        }
-      }
-      throw new Error(lastError || "Errore di connessione ai modelli Gemini Flash.");
-    }
-
     async function askGemini() {
       const qText = document.getElementById('question-text').value.trim();
       if (!qText) return alert("Inserisci la domanda prima di chiedere a Gemini!");
@@ -194,7 +166,7 @@
 Capitale attuale: ${state.capital}€. Domanda ${state.step} di 15.
 Analizza questa domanda del quiz: "${qText}".
 
-Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente struttura (senza marcatori markdown):
+Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente struttura:
 {
   "analisi": "Analisi sintetica della partita, statistiche e motivazione della scelta.",
   "percentuale_si": 65,
@@ -203,7 +175,27 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
 }`;
 
       try {
-        const data = await fetchFlashModel(cleanKey, systemPrompt);
+        // Usa l'alias stabile gemini-1.5-flash dell'API Free Tier
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanKey}`;
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: systemPrompt }] }]
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error.message);
+        }
+
+        if (!data.candidates || !data.candidates[0].content.parts[0].text) {
+          throw new Error("Risposta vuota dall'AI.");
+        }
+
         let rawText = data.candidates[0].content.parts[0].text.trim();
         rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
         
@@ -214,12 +206,12 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
           aiRes = {
             analisi: rawText,
             percentuale_si: 50,
-            consiglio_scommesse: "Verifica quote sul sito del bookmaker",
-            da_evitare: "Mercati ad altissima varianza"
+            consiglio_scommesse: "Verifica quote sul sito",
+            da_evitare: "Scommesse live"
           };
         }
 
-        // Algoritmo di ripartizione del capitale
+        // Algoritmo di ripartizione
         let pYes = (aiRes.percentuale_si || 50) / 100;
         if (state.step <= 5 && pYes >= 0.65) {
           pYes = pYes >= 0.75 ? 0.85 : 0.70; 
@@ -228,7 +220,7 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
         state.currentYesBet = Math.round(state.capital * pYes);
         state.currentNoBet = state.capital - state.currentYesBet;
 
-        // Render dell'interfaccia
+        // Render UI
         document.getElementById('phase-badge').innerText = `Fase ${state.step <= 5 ? 1 : state.step <= 11 ? 2 : 3}`;
         document.getElementById('advice-body').innerText = aiRes.analisi;
         document.getElementById('confidence-badge').innerText = `Confidenza SÌ: ${aiRes.percentuale_si}%`;
@@ -239,7 +231,7 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
 
         document.getElementById('output-card').classList.remove('hidden');
       } catch (err) {
-        alert("Errore API: " + err.message);
+        alert("Errore: " + err.message);
         console.error(err);
       } finally {
         btn.disabled = false;
