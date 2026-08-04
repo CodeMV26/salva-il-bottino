@@ -50,7 +50,7 @@
     <!-- CARICAMENTO -->
     <div id="loading-spinner" class="hidden text-center py-4">
       <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
-      <p class="text-xs text-slate-400 mt-2">Gemini sta elaborando l'analisi tattica...</p>
+      <p class="text-xs text-slate-400 mt-2">Gemini sta calcolando la strategia ed i volumi di puntata...</p>
     </div>
 
     <!-- RISPOSTA DI GEMINI (OUTPUT) -->
@@ -158,21 +158,21 @@
 
       const cleanKey = state.apiKey.trim();
 
-      const systemPrompt = `Sei un consulente di scommesse sportive per il quiz "Salva il Bottino".
-Capitale attuale: ${state.capital}€. Domanda numero ${state.step} su 15.
-Analizza questo evento: "${qText}".
+      const systemPrompt = `Sei un consulente esperto di scommesse sportive per il quiz "Salva il Bottino".
+Capitale attuale: ${state.capital}€. Domanda ${state.step} di 15.
+Analizza questa domanda del quiz: "${qText}".
 
-Rispondi SOLO ed ESCLUSIVAMENTE con un JSON valido con questa struttura (senza formattazione markdown):
+Fornisci una risposta ESCLUSIVAMENTE formatted in un oggetto JSON valido con la seguente struttura:
 {
-  "analisi": "Analisi della partita e pronostico principale espresso in modo chiaro.",
+  "analisi": "Analisi sintetica della partita, statistiche e motivazione della scelta.",
   "percentuale_si": 65,
-  "consiglio_scommesse": "Scommessa raccomandata per questo evento.",
-  "da_evitare": "Opzione o mercato ad alto rischio da evitare."
+  "consiglio_scommesse": "Scommessa correlata consigliata.",
+  "da_evitare": "Mercato o trappola da evitare assolutamente."
 }`;
 
       try {
-        // Endpoint di produzione standard e stabile
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanKey}`;
+        // Usa gemini-2.5-flash
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${cleanKey}`;
         
         const response = await fetch(url, {
           method: 'POST',
@@ -185,16 +185,30 @@ Rispondi SOLO ed ESCLUSIVAMENTE con un JSON valido con questa struttura (senza f
         const data = await response.json();
 
         if (data.error) {
-          throw new Error(data.error.message);
+          throw new Error(`Google API (${data.error.code}): ${data.error.message}`);
         }
 
         if (!data.candidates || !data.candidates[0].content.parts[0].text) {
-          throw new Error("Risposta vuota ricevuta da Google.");
+          throw new Error("Nessuna risposta generata da Gemini.");
         }
 
-        let rawText = data.candidates[0].content.parts[0].text;
-        rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const aiRes = JSON.parse(rawText);
+        let rawText = data.candidates[0].content.parts[0].text.trim();
+        
+        // Pulizia da eventuali blocchi markdown ```json ... ```
+        rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        
+        let aiRes;
+        try {
+          aiRes = JSON.parse(rawText);
+        } catch (e) {
+          // Fallback parsing manuale se l'AI restituisce testo formattato
+          aiRes = {
+            analisi: rawText,
+            percentuale_si: 50,
+            consiglio_scommesse: "Verifica quote locali",
+            da_evitare: "Scommesse live senza copertura"
+          };
+        }
 
         // Algoritmo di ripartizione del capitale
         let pYes = (aiRes.percentuale_si || 50) / 100;
@@ -216,7 +230,7 @@ Rispondi SOLO ed ESCLUSIVAMENTE con un JSON valido con questa struttura (senza f
 
         document.getElementById('output-card').classList.remove('hidden');
       } catch (err) {
-        alert("Errore API: " + err.message + "\n\nSe l'errore persiste, attendi 30 secondi che il contatore delle richieste si azzeri.");
+        alert("Errore API: " + err.message);
         console.error(err);
       } finally {
         document.getElementById('loading-spinner').classList.add('hidden');
