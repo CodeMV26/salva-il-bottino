@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Salva il Bottino - AI Advisor</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Import SDK Ufficiale Google Gemini -->
   <script type="importmap">
     {
       "imports": {
@@ -50,7 +49,7 @@
 
     <div id="loading-spinner" class="hidden text-center py-4">
       <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
-      <p class="text-xs text-slate-400 mt-2">Gemini 2.0 Flash sta calcolando la strategia...</p>
+      <p class="text-xs text-slate-400 mt-2">Gemini sta elaborando l'analisi...</p>
     </div>
 
     <div id="output-card" class="hidden bg-slate-800 p-4 rounded-xl border border-emerald-500/40 space-y-3">
@@ -168,20 +167,11 @@ Rispondi ESCLUSIVAMENTE in JSON valido con questa struttura:
   "da_evitare": "Opzione da evitare."
 }`;
 
-        let response;
-        try {
-          // Modello primario ufficiale
-          response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
-            contents: systemPrompt,
-          });
-        } catch (mErr) {
-          // Fallback a flash-lite
-          response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-lite',
-            contents: systemPrompt,
-          });
-        }
+        // Chiamata con il modello Free Tier universale
+        const response = await ai.models.generateContent({
+          model: 'gemini-1.5-flash',
+          contents: systemPrompt,
+        });
 
         let rawText = response.text.trim();
         rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
