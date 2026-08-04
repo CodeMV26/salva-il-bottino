@@ -50,7 +50,7 @@
     <!-- CARICAMENTO -->
     <div id="loading-spinner" class="hidden text-center py-4">
       <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
-      <p class="text-xs text-slate-400 mt-2">Gemini sta calcolando la strategia ed i volumi di puntata...</p>
+      <p class="text-xs text-slate-400 mt-2">Gemini sta elaborando l'analisi tattica...</p>
     </div>
 
     <!-- RISPOSTA DI GEMINI (OUTPUT) -->
@@ -148,15 +148,6 @@
       }
     }
 
-    async function tryFetchModel(model, cleanKey, systemPrompt) {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] })
-      });
-      return await response.json();
-    }
-
     async function askGemini() {
       const qText = document.getElementById('question-text').value.trim();
       if (!qText) return alert("Inserisci la domanda prima di chiedere a Gemini!");
@@ -167,47 +158,45 @@
 
       const cleanKey = state.apiKey.trim();
 
-      const systemPrompt = `Sei un consulente esperto di scommesse sportive specializzato nel quiz "Salva il Bottino".
-Il giocatore ha attualmente ${state.capital}€ ed è alla domanda ${state.step} di 15.
-Analizza la seguente domanda: "${qText}".
+      const systemPrompt = `Sei un consulente di scommesse sportive per il quiz "Salva il Bottino".
+Capitale attuale: ${state.capital}€. Domanda numero ${state.step} su 15.
+Analizza questo evento: "${qText}".
 
-Fornisci una risposta ESCLUSIVAMENTE in formato JSON con la seguente struttura:
+Rispondi SOLO ed ESCLUSIVAMENTE con un JSON valido con questa struttura (senza formattazione markdown):
 {
-  "analisi": "Spiegazione sintetica della partita, condizione delle squadre e quote/probabilità implicite.",
+  "analisi": "Analisi della partita e pronostico principale espresso in modo chiaro.",
   "percentuale_si": 65,
-  "consiglio_scommesse": "Scommesse correlate consigliate per questo tipo di eventi.",
-  "da_evitare": "Mercati o opzioni ad altissima varianza da evitare assolutamente."
+  "consiglio_scommesse": "Scommessa raccomandata per questo evento.",
+  "da_evitare": "Opzione o mercato ad alto rischio da evitare."
 }`;
 
-      // Elenco di fallback per coprire i vari modelli disponibili nell'API
-      const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
-      let data = null;
-      let lastError = null;
-
-      for (const model of modelsToTry) {
-        try {
-          data = await tryFetchModel(model, cleanKey, systemPrompt);
-          if (data && !data.error) break; // Trovato modello funzionante
-          if (data && data.error) lastError = data.error.message;
-        } catch (e) {
-          lastError = e.message;
-        }
-      }
-
       try {
-        if (!data || data.error) {
-          throw new Error(lastError || "Impossibile contattare i modelli Gemini.");
+        // Endpoint di produzione standard e stabile
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanKey}`;
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: systemPrompt }] }]
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error.message);
         }
 
         if (!data.candidates || !data.candidates[0].content.parts[0].text) {
-          throw new Error("Risposta vuota dall'AI.");
+          throw new Error("Risposta vuota ricevuta da Google.");
         }
 
         let rawText = data.candidates[0].content.parts[0].text;
         rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
         const aiRes = JSON.parse(rawText);
 
-        // Algoritmo di allocazione
+        // Algoritmo di ripartizione del capitale
         let pYes = (aiRes.percentuale_si || 50) / 100;
         if (state.step <= 5 && pYes >= 0.65) {
           pYes = pYes >= 0.75 ? 0.85 : 0.70; 
@@ -216,7 +205,7 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON con la seguente struttura:
         state.currentYesBet = Math.round(state.capital * pYes);
         state.currentNoBet = state.capital - state.currentYesBet;
 
-        // Render UI
+        // Render dell'interfaccia
         document.getElementById('phase-badge').innerText = `Fase ${state.step <= 5 ? 1 : state.step <= 11 ? 2 : 3}`;
         document.getElementById('advice-body').innerText = aiRes.analisi;
         document.getElementById('confidence-badge').innerText = `Confidenza SÌ: ${aiRes.percentuale_si}%`;
@@ -227,7 +216,7 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON con la seguente struttura:
 
         document.getElementById('output-card').classList.remove('hidden');
       } catch (err) {
-        alert("Errore Gemini API: " + err.message);
+        alert("Errore API: " + err.message + "\n\nSe l'errore persiste, attendi 30 secondi che il contatore delle richieste si azzeri.");
         console.error(err);
       } finally {
         document.getElementById('loading-spinner').classList.add('hidden');
