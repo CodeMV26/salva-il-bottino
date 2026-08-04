@@ -167,9 +167,9 @@ Rispondi ESCLUSIVAMENTE in JSON valido con questa struttura:
   "da_evitare": "Opzione da evitare."
 }`;
 
-        // Chiamata con il modello Free Tier universale
+        // Nome modello corretto per l'SDK @google/genai
         const response = await ai.models.generateContent({
-          model: 'gemini-1.5-flash',
+          model: 'gemini-2.0-flash',
           contents: systemPrompt,
         });
 
