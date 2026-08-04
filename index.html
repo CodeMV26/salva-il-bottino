@@ -50,7 +50,7 @@
     <!-- CARICAMENTO -->
     <div id="loading-spinner" class="hidden text-center py-4">
       <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
-      <p class="text-xs text-slate-400 mt-2">Gemini sta calcolando la strategia ed i volumi di puntata...</p>
+      <p class="text-xs text-slate-400 mt-2">Gemini Flash sta analizzando la partita...</p>
     </div>
 
     <!-- RISPOSTA DI GEMINI (OUTPUT) -->
@@ -148,10 +148,42 @@
       }
     }
 
+    async function fetchFlashModel(cleanKey, systemPrompt) {
+      // Modelli Flash in ordine di preferenza per le API REST
+      const flashModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      let lastError = null;
+
+      for (const model of flashModels) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: systemPrompt }] }]
+            })
+          });
+
+          const data = await response.json();
+          if (data && !data.error && data.candidates && data.candidates[0].content.parts[0].text) {
+            return data;
+          }
+          if (data && data.error) lastError = data.error.message;
+        } catch (e) {
+          lastError = e.message;
+        }
+      }
+      throw new Error(lastError || "Errore di connessione ai modelli Gemini Flash.");
+    }
+
     async function askGemini() {
       const qText = document.getElementById('question-text').value.trim();
       if (!qText) return alert("Inserisci la domanda prima di chiedere a Gemini!");
       if (!state.apiKey) return configAPIKey();
+
+      const btn = document.getElementById('ask-btn');
+      btn.disabled = true;
+      btn.classList.add('opacity-50');
 
       document.getElementById('loading-spinner').classList.remove('hidden');
       document.getElementById('output-card').classList.add('hidden');
@@ -171,27 +203,7 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
 }`;
 
       try {
-        // Endpoint Ufficiale v1 per gemini-2.0-flash
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${cleanKey}`;
-        
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: systemPrompt }] }]
-          })
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(`Google API (${data.error.code}): ${data.error.message}`);
-        }
-
-        if (!data.candidates || !data.candidates[0].content.parts[0].text) {
-          throw new Error("Nessuna risposta generata da Gemini.");
-        }
-
+        const data = await fetchFlashModel(cleanKey, systemPrompt);
         let rawText = data.candidates[0].content.parts[0].text.trim();
         rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
         
@@ -202,8 +214,8 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
           aiRes = {
             analisi: rawText,
             percentuale_si: 50,
-            consiglio_scommesse: "Verifica quote locali",
-            da_evitare: "Scommesse live senza copertura"
+            consiglio_scommesse: "Verifica quote sul sito del bookmaker",
+            da_evitare: "Mercati ad altissima varianza"
           };
         }
 
@@ -230,6 +242,8 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
         alert("Errore API: " + err.message);
         console.error(err);
       } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
         document.getElementById('loading-spinner').classList.add('hidden');
       }
     }
