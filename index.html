@@ -148,6 +148,18 @@
       }
     }
 
+    async function callGeminiApi(modelName, cleanKey, systemPrompt) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${cleanKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: systemPrompt }] }]
+        })
+      });
+      return await response.json();
+    }
+
     async function askGemini() {
       const qText = document.getElementById('question-text').value.trim();
       if (!qText) return alert("Inserisci la domanda prima di chiedere a Gemini!");
@@ -162,7 +174,7 @@
 Capitale attuale: ${state.capital}€. Domanda ${state.step} di 15.
 Analizza questa domanda del quiz: "${qText}".
 
-Fornisci una risposta ESCLUSIVAMENTE formatted in un oggetto JSON valido con la seguente struttura:
+Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente struttura (senza marcatori markdown):
 {
   "analisi": "Analisi sintetica della partita, statistiche e motivazione della scelta.",
   "percentuale_si": 65,
@@ -171,18 +183,13 @@ Fornisci una risposta ESCLUSIVAMENTE formatted in un oggetto JSON valido con la 
 }`;
 
       try {
-        // Usa gemini-2.5-flash
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${cleanKey}`;
-        
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: systemPrompt }] }]
-          })
-        });
+        // Tentativo con modello di produzione standard
+        let data = await callGeminiApi('gemini-2.0-flash', cleanKey, systemPrompt);
 
-        const data = await response.json();
+        // Fallback automatico a gemini-1.5-flash se necessario
+        if (data.error) {
+          data = await callGeminiApi('gemini-1.5-flash', cleanKey, systemPrompt);
+        }
 
         if (data.error) {
           throw new Error(`Google API (${data.error.code}): ${data.error.message}`);
@@ -193,15 +200,12 @@ Fornisci una risposta ESCLUSIVAMENTE formatted in un oggetto JSON valido con la 
         }
 
         let rawText = data.candidates[0].content.parts[0].text.trim();
-        
-        // Pulizia da eventuali blocchi markdown ```json ... ```
         rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
         
         let aiRes;
         try {
           aiRes = JSON.parse(rawText);
         } catch (e) {
-          // Fallback parsing manuale se l'AI restituisce testo formattato
           aiRes = {
             analisi: rawText,
             percentuale_si: 50,
