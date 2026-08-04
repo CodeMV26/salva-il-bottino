@@ -50,7 +50,7 @@
     <!-- CARICAMENTO -->
     <div id="loading-spinner" class="hidden text-center py-4">
       <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
-      <p class="text-xs text-slate-400 mt-2">Gemini sta calcolando la strategia...</p>
+      <p class="text-xs text-slate-400 mt-2">Gemini 2.0 sta calcolando la strategia...</p>
     </div>
 
     <!-- RISPOSTA DI GEMINI (OUTPUT) -->
@@ -175,8 +175,8 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
 }`;
 
       try {
-        // Usa l'alias stabile gemini-1.5-flash dell'API Free Tier
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanKey}`;
+        // Endpoint ufficiale V1 con Gemini 2.0 Flash
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${cleanKey}`;
         
         const response = await fetch(url, {
           method: 'POST',
@@ -211,7 +211,6 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
           };
         }
 
-        // Algoritmo di ripartizione
         let pYes = (aiRes.percentuale_si || 50) / 100;
         if (state.step <= 5 && pYes >= 0.65) {
           pYes = pYes >= 0.75 ? 0.85 : 0.70; 
@@ -220,7 +219,6 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
         state.currentYesBet = Math.round(state.capital * pYes);
         state.currentNoBet = state.capital - state.currentYesBet;
 
-        // Render UI
         document.getElementById('phase-badge').innerText = `Fase ${state.step <= 5 ? 1 : state.step <= 11 ? 2 : 3}`;
         document.getElementById('advice-body').innerText = aiRes.analisi;
         document.getElementById('confidence-badge').innerText = `Confidenza SÌ: ${aiRes.percentuale_si}%`;
@@ -231,7 +229,7 @@ Fornisci una risposta ESCLUSIVAMENTE in formato JSON valido con la seguente stru
 
         document.getElementById('output-card').classList.remove('hidden');
       } catch (err) {
-        alert("Errore: " + err.message);
+        alert("Errore API: " + err.message);
         console.error(err);
       } finally {
         btn.disabled = false;
