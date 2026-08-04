@@ -15,15 +15,18 @@
   <header class="border-b border-slate-800 pb-3">
     <div class="flex justify-between items-center mb-2">
       <span class="text-[10px] font-bold uppercase tracking-widest text-emerald-400">Salva il Bottino AI Advisor</span>
-      <button onclick="resetGame()" class="text-[11px] text-slate-400 hover:text-red-400 underline">Reset</button>
+      <div class="space-x-2">
+        <button onclick="editInitialCapital()" class="text-[11px] text-slate-400 hover:text-emerald-400 underline">Modifica Capitale</button>
+        <button onclick="resetGame()" class="text-[11px] text-slate-400 hover:text-red-400 underline">Reset</button>
+      </div>
     </div>
     <div class="flex items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700">
       <div>
         <span class="text-[10px] text-slate-400 block uppercase">Domanda</span>
         <span id="step-display" class="text-base font-black text-white">1 / 15</span>
       </div>
-      <div class="text-right">
-        <span class="text-[10px] text-slate-400 block uppercase">Capitale Residuo</span>
+      <div class="text-right cursor-pointer" onclick="editInitialCapital()" title="Clicca per modificare il capitale">
+        <span class="text-[10px] text-slate-400 block uppercase">Capitale Residuo ✏️</span>
         <span id="capital-display" class="text-xl font-black text-emerald-400">3.000 €</span>
       </div>
     </div>
@@ -98,24 +101,64 @@
 
   <!-- STORICO -->
   <footer class="mt-4">
-    <details class="text-xs text-slate-400 bg-slate-800/40 rounded-lg p-2 border border-slate-800">
+    <details class="text-xs text-slate-400 bg-slate-800/40 rounded-lg p-2 border border-slate-800" open>
       <summary class="font-semibold cursor-pointer text-slate-300">Storico Domande (<span id="history-count">0</span>/15)</summary>
-      <div id="history-list" class="mt-2 space-y-1 max-h-32 overflow-y-auto text-[11px] divide-y divide-slate-800"></div>
+      <div id="history-list" class="mt-2 space-y-1 max-h-36 overflow-y-auto text-[11px] divide-y divide-slate-800"></div>
     </details>
   </footer>
 
   <!-- JAVASCRIPT LOGIC -->
   <script>
-    let state = { step: 1, capital: 3000, currentYesBet: 0, currentNoBet: 0, history: [] };
+    let state = {
+      step: 1,
+      capital: 3000,
+      currentYesBet: 0,
+      currentNoBet: 0,
+      history: [],
+      currentQuestion: "",
+      lastAnalysis: null
+    };
 
     window.onload = () => {
-      const saved = localStorage.getItem('bottino_ai_master_state');
-      if (saved) state = JSON.parse(saved);
+      loadState();
       updateUI();
     };
 
     function saveState() {
-      localStorage.setItem('bottino_ai_master_state', JSON.stringify(state));
+      state.currentQuestion = document.getElementById('question-text').value;
+      localStorage.setItem('bottino_ai_persistent_state', JSON.stringify(state));
+    }
+
+    function loadState() {
+      const saved = localStorage.getItem('bottino_ai_persistent_state');
+      if (saved) {
+        try {
+          state = JSON.parse(saved);
+          if (state.currentQuestion) {
+            document.getElementById('question-text').value = state.currentQuestion;
+          }
+          if (state.lastAnalysis) {
+            renderOutputCard(state.lastAnalysis);
+          }
+        } catch (e) {
+          console.error("Errore nel caricare lo stato salvato", e);
+        }
+      }
+    }
+
+    function editInitialCapital() {
+      const current = state.capital;
+      const input = prompt("Inserisci la nuova cifra del capitale (es. 5000):", current);
+      if (input !== null) {
+        const parsed = parseFloat(input.replace(/[^\d.]/g, ''));
+        if (!isNaN(parsed) && parsed >= 0) {
+          state.capital = parsed;
+          saveState();
+          updateUI();
+        } else {
+          alert("Inserisci una cifra valida.");
+        }
+      }
     }
 
     function updateUI() {
@@ -147,6 +190,8 @@
       document.getElementById('loading-spinner').classList.remove('hidden');
       document.getElementById('output-card').classList.add('hidden');
 
+      saveState();
+
       const promptText = `Agisci come un consulente esperto del quiz "Salva il Bottino".
 Capitale attuale: ${state.capital}€. Domanda ${state.step} di 15.
 Analizza questa domanda: "${qText}".
@@ -161,7 +206,6 @@ EVITARE: <Indica la scommessa o l'errore metodologico da evitare in questa fase>
         const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(promptText)}`);
         const rawText = await response.text();
 
-        // Estrattore con fallback di sicurezza per evitare errori undefined
         let analisi = "Il potenziale offensivo della squadra di casa è elevato, ma la fase difensiva avversaria potrebbe rallentare i ritmi nei primi minuti.";
         let percentuale = 65;
         let consiglio = "Mantenere una distribuzione bilanciata per proteggere la massa critica del capitale.";
@@ -179,26 +223,27 @@ EVITARE: <Indica la scommessa o l'errore metodologico da evitare in questa fase>
         const matchEvitare = rawText.match(/EVITARE:\s*([\s\S]*?)$/i);
         if (matchEvitare && matchEvitare[1].trim()) evitare = matchEvitare[1].trim();
 
-        // Calcolo della ripartizione tattica del capitale
         let pYes = percentuale / 100;
         if (state.step <= 5) {
-          // Fase 1 (Conservativa): Bilanciamento 70/30 o max 80/20 se confidenza alta
           pYes = pYes >= 0.70 ? 0.70 : (pYes <= 0.30 ? 0.30 : pYes);
         }
 
         state.currentYesBet = Math.round(state.capital * pYes);
         state.currentNoBet = state.capital - state.currentYesBet;
 
-        // Render UI
-        document.getElementById('phase-badge').innerText = `Fase ${state.step <= 5 ? 1 : state.step <= 11 ? 2 : 3}`;
-        document.getElementById('advice-body').innerText = analisi;
-        document.getElementById('confidence-badge').innerText = `Confidenza SÌ: ${percentuale}%`;
-        document.getElementById('bet-yes').innerText = `${state.currentYesBet.toLocaleString('it-IT')} €`;
-        document.getElementById('bet-no').innerText = `${state.currentNoBet.toLocaleString('it-IT')} €`;
-        document.getElementById('rec-bets').innerText = consiglio;
-        document.getElementById('avoid-bets').innerText = evitare;
+        state.lastAnalysis = {
+          analisi,
+          percentuale,
+          consiglio,
+          evitare,
+          yesBet: state.currentYesBet,
+          noBet: state.currentNoBet,
+          step: state.step
+        };
 
-        document.getElementById('output-card').classList.remove('hidden');
+        saveState();
+        renderOutputCard(state.lastAnalysis);
+
       } catch (err) {
         alert("Errore nell'elaborazione: " + err.message);
         console.error(err);
@@ -209,6 +254,18 @@ EVITARE: <Indica la scommessa o l'errore metodologico da evitare in questa fase>
       }
     }
 
+    function renderOutputCard(data) {
+      document.getElementById('phase-badge').innerText = `Fase ${data.step <= 5 ? 1 : data.step <= 11 ? 2 : 3}`;
+      document.getElementById('advice-body').innerText = data.analisi;
+      document.getElementById('confidence-badge').innerText = `Confidenza SÌ: ${data.percentuale}%`;
+      document.getElementById('bet-yes').innerText = `${data.yesBet.toLocaleString('it-IT')} €`;
+      document.getElementById('bet-no').innerText = `${data.noBet.toLocaleString('it-IT')} €`;
+      document.getElementById('rec-bets').innerText = data.consiglio;
+      document.getElementById('avoid-bets').innerText = data.evitare;
+
+      document.getElementById('output-card').classList.remove('hidden');
+    }
+
     function registerResult(esito) {
       const qText = document.getElementById('question-text').value;
       const salvato = esito === 'YES' ? state.currentYesBet : state.currentNoBet;
@@ -216,6 +273,8 @@ EVITARE: <Indica la scommessa o l'errore metodologico da evitare in questa fase>
       state.history.push({ q: qText, winEsito: esito, salvato: salvato });
       state.capital = salvato;
       state.step += 1;
+      state.lastAnalysis = null;
+      state.currentQuestion = "";
 
       saveState();
 
@@ -232,9 +291,18 @@ EVITARE: <Indica la scommessa o l'errore metodologico da evitare in questa fase>
     }
 
     function resetGame() {
-      if (confirm("Vuoi resettare la partita a 3.000 € ed azzerare lo storico?")) {
-        state = { step: 1, capital: 3000, currentYesBet: 0, currentNoBet: 0, history: [] };
-        saveState();
+      if (confirm("Vuoi resettare la partita, azzerare il capitale e cancellare lo storico salvato?")) {
+        state = {
+          step: 1,
+          capital: 3000,
+          currentYesBet: 0,
+          currentNoBet: 0,
+          history: [],
+          currentQuestion: "",
+          lastAnalysis: null
+        };
+        localStorage.removeItem('bottino_ai_persistent_state');
+        document.getElementById('question-text').value = '';
         document.getElementById('output-card').classList.add('hidden');
         updateUI();
       }
